@@ -33,7 +33,6 @@ coverage/
 
 # Model / data artifacts (adjust if you want tracked)
 *.pkl
-*.joblib
 *.onnx
 backend/model_api/models/*.bin
 backend/model_api/models/*.ubj
