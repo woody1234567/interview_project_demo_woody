@@ -80,9 +80,6 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = "==0.30.6" },
 ]
 
-[package.metadata.requires-dev]
-dev = []
-
 [[package]]
 name = "h11"
 version = "0.16.0"
