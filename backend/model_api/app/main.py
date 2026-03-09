@@ -43,7 +43,10 @@ def health():
         'status': 'ok',
         'service': 'model-api',
         'model_version': MODEL_VERSION,
-        'runtime_model': 'xgboost' if SCORER.enabled else 'fallback-heuristic',
+        'runtime_model': SCORER.runtime_model,
+        'model_path': SCORER.model_path,
+        'model_loaded': SCORER.enabled,
+        'load_error': SCORER.load_error,
         'metadata': metadata,
     }
 

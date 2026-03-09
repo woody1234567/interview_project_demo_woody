@@ -10,20 +10,22 @@ MODEL_VERSION = os.getenv('MODEL_VERSION', 'baseline_xgboost_v1')
 T_MID = float(os.getenv('T_MID', '0.10'))
 T_HIGH = float(os.getenv('T_HIGH', '0.30'))
 
-MODEL_DIR = Path(__file__).resolve().parents[1] / 'models'
-METADATA_PATH = MODEL_DIR / 'metadata.json'
-XGB_JSON_PATH = MODEL_DIR / 'xgboost_model.json'
+# backend/model_api/app -> backend/model_api
+MODEL_API_DIR = Path(__file__).resolve().parents[1]
+METADATA_PATH = MODEL_API_DIR / 'models' / 'metadata.json'
+
+# backend/model_api/app -> backend/model_api -> backend -> project root
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_XGB_JOBLIB = PROJECT_ROOT / 'models' / 'xgboost_pipeline.joblib'
+DEFAULT_DT_JOBLIB = PROJECT_ROOT / 'models' / 'decision_tree_pipeline.joblib'
 
 
 def load_metadata() -> Dict:
     if METADATA_PATH.exists():
         return json.loads(METADATA_PATH.read_text(encoding='utf-8'))
     return {
-        'note': 'No trained XGBoost artifact found. Using heuristic fallback scorer.',
-        'features': [
-            'step', 'amount', 'oldbalanceOrg', 'newbalanceOrig', 'oldbalanceDest', 'newbalanceDest',
-            'deltaOrig', 'deltaDest', 'isOrigBalanceZero', 'isDestBalanceZero', 'isFlaggedFraud', 'type'
-        ]
+        'note': 'No trained joblib artifact found. Using heuristic fallback scorer.',
+        'default_model_candidates': [str(DEFAULT_XGB_JOBLIB), str(DEFAULT_DT_JOBLIB)],
     }
 
 
@@ -32,32 +34,7 @@ def _sigmoid(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
-def _to_numeric_features(features: Dict) -> Dict[str, float]:
-    tx_type = str(features.get('type', 'PAYMENT'))
-    return {
-        'step': float(features.get('step', 0)),
-        'amount': float(features.get('amount', 0)),
-        'oldbalanceOrg': float(features.get('oldbalanceOrg', 0)),
-        'newbalanceOrig': float(features.get('newbalanceOrig', 0)),
-        'oldbalanceDest': float(features.get('oldbalanceDest', 0)),
-        'newbalanceDest': float(features.get('newbalanceDest', 0)),
-        'deltaOrig': float(features.get('deltaOrig', 0)),
-        'deltaDest': float(features.get('deltaDest', 0)),
-        'isOrigBalanceZero': float(features.get('isOrigBalanceZero', 0)),
-        'isDestBalanceZero': float(features.get('isDestBalanceZero', 0)),
-        'isFlaggedFraud': float(features.get('isFlaggedFraud', 0)),
-        'type_CASH_IN': 1.0 if tx_type == 'CASH_IN' else 0.0,
-        'type_CASH_OUT': 1.0 if tx_type == 'CASH_OUT' else 0.0,
-        'type_DEBIT': 1.0 if tx_type == 'DEBIT' else 0.0,
-        'type_PAYMENT': 1.0 if tx_type == 'PAYMENT' else 0.0,
-        'type_TRANSFER': 1.0 if tx_type == 'TRANSFER' else 0.0,
-    }
-
-
 def fallback_score(features: Dict) -> float:
-    """
-    XGBoost artifact 不存在時的保底 scorer。
-    """
     amount = float(features.get('amount', 0.0))
     delta_orig = float(features.get('deltaOrig', 0.0))
     delta_dest = float(features.get('deltaDest', 0.0))
@@ -75,39 +52,50 @@ def fallback_score(features: Dict) -> float:
     return max(0.0, min(1.0, _sigmoid(z)))
 
 
-class XGBScorer:
+class JoblibScorer:
     def __init__(self) -> None:
-        self.booster: Optional[object] = None
-        self.feature_names: list[str] = []
+        self.model: Optional[object] = None
         self.enabled = False
+        self.runtime_model = 'fallback-heuristic'
+        self.model_path: Optional[str] = None
+        self.load_error: Optional[str] = None
+
+        model_path_env = os.getenv('MODEL_PATH', '').strip()
+        candidates = [Path(model_path_env)] if model_path_env else [DEFAULT_XGB_JOBLIB, DEFAULT_DT_JOBLIB]
 
         try:
-            import xgboost as xgb  # type: ignore
-            if XGB_JSON_PATH.exists():
-                booster = xgb.Booster()
-                booster.load_model(str(XGB_JSON_PATH))
-                self.booster = booster
-                self.feature_names = list(booster.feature_names or [])
-                self.enabled = True
-        except Exception:
+            import joblib  # type: ignore
+            import pandas as pd  # type: ignore
+            self._pd = pd
+
+            for p in candidates:
+                if p.exists():
+                    self.model = joblib.load(p)
+                    if not hasattr(self.model, 'predict_proba'):
+                        raise ValueError(f'Model at {p} has no predict_proba method')
+                    self.enabled = True
+                    self.model_path = str(p)
+                    self.runtime_model = p.stem
+                    self.load_error = None
+                    return
+
+            self.load_error = f'No model file found in candidates: {[str(c) for c in candidates]}'
+        except Exception as e:
             self.enabled = False
+            self.load_error = str(e)
 
     def score(self, features: Dict) -> float:
-        if not self.enabled or self.booster is None:
+        if not self.enabled or self.model is None:
             return fallback_score(features)
 
-        import pandas as pd
-        import xgboost as xgb  # type: ignore
-
-        row = _to_numeric_features(features)
-        cols = self.feature_names if self.feature_names else list(row.keys())
-        X = pd.DataFrame([{c: row.get(c, 0.0) for c in cols}], columns=cols)
-        dmat = xgb.DMatrix(X, feature_names=cols)
-        pred = float(self.booster.predict(dmat)[0])
+        row = dict(features)
+        row.pop('feature_version', None)
+        X = self._pd.DataFrame([row])
+        pred = float(self.model.predict_proba(X)[:, 1][0])
         return max(0.0, min(1.0, pred))
 
 
-SCORER = XGBScorer()
+SCORER = JoblibScorer()
 
 
 def score(features: Dict) -> float:
