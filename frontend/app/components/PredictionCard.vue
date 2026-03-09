@@ -4,6 +4,7 @@ const props = defineProps<{
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
   tMid?: number
   tHigh?: number
+  modelUsed?: string
 }>()
 
 const riskColor = computed(() => {
@@ -18,6 +19,7 @@ const riskColor = computed(() => {
     <h2>Prediction Result</h2>
     <p><strong>Fraud Probability:</strong> {{ (fraudProb * 100).toFixed(2) }}%</p>
     <p><strong>Risk Level:</strong> <span :style="{ color: riskColor }">{{ riskLevel }}</span></p>
+    <p v-if="modelUsed" class="muted"><strong>Model Used:</strong> {{ modelUsed }}</p>
     <p v-if="tMid !== undefined && tHigh !== undefined" class="muted">
       thresholds: t_mid={{ tMid }}, t_high={{ tHigh }}
     </p>

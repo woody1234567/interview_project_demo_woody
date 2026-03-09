@@ -30,11 +30,12 @@ uvicorn app.main:app --reload --port 8002
 - `POST /v1/model/predict-batch`
 
 ## Notes
-model-api 目前會優先載入專案根目錄的 joblib 模型：
-1. `models/xgboost_pipeline.joblib`（預設優先）
-2. `models/decision_tree_pipeline.joblib`（次要備援）
+model-api 目前會嘗試載入專案根目錄的三個 joblib 模型：
+1. `models/xgboost_pipeline.joblib`
+2. `models/decision_tree_pipeline.joblib`
+3. `models/logistic_regression_pipeline.joblib`
 
-若兩者都不可用，才會退回 heuristic fallback scorer。
+前端可在 `POST /v1/model/predict` 的 request body 指定：
+- `model_name`: `xgboost` | `decision_tree` | `logistic_regression`
 
-可用環境變數覆蓋模型路徑：
-- `MODEL_PATH=/absolute/or/relative/path/to/model.joblib`
+若指定模型不可用，會優先回退到已載入的 `xgboost`，再回退到其他可用模型；若都不可用，才退回 heuristic fallback scorer。

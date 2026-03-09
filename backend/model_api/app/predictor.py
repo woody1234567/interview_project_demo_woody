@@ -6,18 +6,19 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
-MODEL_VERSION = os.getenv('MODEL_VERSION', 'baseline_xgboost_v1')
+MODEL_VERSION = os.getenv('MODEL_VERSION', 'baseline_multi_model_v1')
 T_MID = float(os.getenv('T_MID', '0.10'))
 T_HIGH = float(os.getenv('T_HIGH', '0.30'))
 
-# backend/model_api/app -> backend/model_api
 MODEL_API_DIR = Path(__file__).resolve().parents[1]
 METADATA_PATH = MODEL_API_DIR / 'models' / 'metadata.json'
-
-# backend/model_api/app -> backend/model_api -> backend -> project root
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_XGB_JOBLIB = PROJECT_ROOT / 'models' / 'xgboost_pipeline.joblib'
-DEFAULT_DT_JOBLIB = PROJECT_ROOT / 'models' / 'decision_tree_pipeline.joblib'
+
+MODEL_FILES = {
+    'xgboost': PROJECT_ROOT / 'models' / 'xgboost_pipeline.joblib',
+    'decision_tree': PROJECT_ROOT / 'models' / 'decision_tree_pipeline.joblib',
+    'logistic_regression': PROJECT_ROOT / 'models' / 'logistic_regression_pipeline.joblib',
+}
 
 
 def load_metadata() -> Dict:
@@ -25,7 +26,7 @@ def load_metadata() -> Dict:
         return json.loads(METADATA_PATH.read_text(encoding='utf-8'))
     return {
         'note': 'No trained joblib artifact found. Using heuristic fallback scorer.',
-        'default_model_candidates': [str(DEFAULT_XGB_JOBLIB), str(DEFAULT_DT_JOBLIB)],
+        'model_files': {k: str(v) for k, v in MODEL_FILES.items()},
     }
 
 
@@ -52,54 +53,72 @@ def fallback_score(features: Dict) -> float:
     return max(0.0, min(1.0, _sigmoid(z)))
 
 
-class JoblibScorer:
+class MultiModelScorer:
     def __init__(self) -> None:
-        self.model: Optional[object] = None
-        self.enabled = False
+        self.models: Dict[str, object] = {}
+        self.model_paths: Dict[str, str] = {}
+        self.load_errors: Dict[str, str] = {}
         self.runtime_model = 'fallback-heuristic'
-        self.model_path: Optional[str] = None
-        self.load_error: Optional[str] = None
-
-        model_path_env = os.getenv('MODEL_PATH', '').strip()
-        candidates = [Path(model_path_env)] if model_path_env else [DEFAULT_XGB_JOBLIB, DEFAULT_DT_JOBLIB]
 
         try:
             import joblib  # type: ignore
             import pandas as pd  # type: ignore
             self._pd = pd
 
-            for p in candidates:
-                if p.exists():
-                    self.model = joblib.load(p)
-                    if not hasattr(self.model, 'predict_proba'):
-                        raise ValueError(f'Model at {p} has no predict_proba method')
-                    self.enabled = True
-                    self.model_path = str(p)
-                    self.runtime_model = p.stem
-                    self.load_error = None
-                    return
+            for name, path in MODEL_FILES.items():
+                if path.exists():
+                    try:
+                        model = joblib.load(path)
+                        if not hasattr(model, 'predict_proba'):
+                            raise ValueError('predict_proba not found')
+                        self.models[name] = model
+                        self.model_paths[name] = str(path)
+                    except Exception as e:
+                        self.load_errors[name] = str(e)
+                else:
+                    self.load_errors[name] = f'file not found: {path}'
 
-            self.load_error = f'No model file found in candidates: {[str(c) for c in candidates]}'
+            if 'xgboost' in self.models:
+                self.runtime_model = 'xgboost'
+            elif self.models:
+                self.runtime_model = next(iter(self.models.keys()))
         except Exception as e:
-            self.enabled = False
-            self.load_error = str(e)
+            self.load_errors['global'] = str(e)
 
-    def score(self, features: Dict) -> float:
-        if not self.enabled or self.model is None:
-            return fallback_score(features)
+    @property
+    def enabled(self) -> bool:
+        return len(self.models) > 0
 
+    def score(self, features: Dict, model_name: Optional[str] = None) -> tuple[float, str]:
         row = dict(features)
         row.pop('feature_version', None)
+        row.pop('model_name', None)
+
+        if not self.enabled:
+            return fallback_score(row), 'fallback-heuristic'
+
+        selected = model_name or 'xgboost'
+        model = self.models.get(selected)
+        used_name = selected
+
+        if model is None:
+            if 'xgboost' in self.models:
+                model = self.models['xgboost']
+                used_name = 'xgboost'
+            else:
+                used_name = next(iter(self.models.keys()))
+                model = self.models[used_name]
+
         X = self._pd.DataFrame([row])
-        pred = float(self.model.predict_proba(X)[:, 1][0])
-        return max(0.0, min(1.0, pred))
+        pred = float(model.predict_proba(X)[:, 1][0])
+        return max(0.0, min(1.0, pred)), used_name
 
 
-SCORER = JoblibScorer()
+SCORER = MultiModelScorer()
 
 
-def score(features: Dict) -> float:
-    return SCORER.score(features)
+def score(features: Dict, model_name: Optional[str] = None) -> tuple[float, str]:
+    return SCORER.score(features, model_name=model_name)
 
 
 def risk_level(prob: float) -> str:

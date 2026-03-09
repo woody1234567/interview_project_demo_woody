@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { TransactionInput } from '~/components/TransactionForm.vue'
+import type { PredictionInput } from '~/components/TransactionForm.vue'
 
 type PredictResp = {
   fraud_prob: number
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH'
   thresholds?: { t_mid: number; t_high: number }
+  model_used?: string
 }
 
 const config = useRuntimeConfig()
@@ -15,7 +16,7 @@ const loading = ref(false)
 const errorMsg = ref('')
 const result = ref<PredictResp | null>(null)
 
-async function runPrediction(payload: TransactionInput) {
+async function runPrediction(payload: PredictionInput) {
   loading.value = true
   errorMsg.value = ''
   result.value = null
@@ -23,12 +24,15 @@ async function runPrediction(payload: TransactionInput) {
   try {
     const featureResp = await $fetch(`${featureApiBase}/v1/features/transform`, {
       method: 'POST',
-      body: payload
+      body: payload.transaction,
     })
 
     const predictResp = await $fetch<PredictResp>(`${modelApiBase}/v1/model/predict`, {
       method: 'POST',
-      body: featureResp
+      body: {
+        ...featureResp,
+        model_name: payload.model_name,
+      },
     })
 
     result.value = predictResp
@@ -56,6 +60,7 @@ async function runPrediction(payload: TransactionInput) {
       :risk-level="result.risk_level"
       :t-mid="result.thresholds?.t_mid"
       :t-high="result.thresholds?.t_high"
+      :model-used="result.model_used"
     />
   </main>
 </template>

@@ -3,6 +3,7 @@ from typing import Literal, List, Optional
 
 TxnType = Literal['CASH_IN', 'CASH_OUT', 'DEBIT', 'PAYMENT', 'TRANSFER']
 RiskLevel = Literal['LOW', 'MEDIUM', 'HIGH']
+ModelName = Literal['xgboost', 'decision_tree', 'logistic_regression']
 
 
 class FeatureInput(BaseModel):
@@ -21,15 +22,20 @@ class FeatureInput(BaseModel):
     feature_version: Optional[str] = None
 
 
+class PredictRequest(FeatureInput):
+    model_name: Optional[ModelName] = 'xgboost'
+
+
 class PredictResponse(BaseModel):
     fraud_prob: float
     risk_level: RiskLevel
     thresholds: dict
     model_version: str
+    model_used: str
 
 
-class BatchFeatureInput(BaseModel):
-    items: List[FeatureInput]
+class BatchPredictRequest(BaseModel):
+    items: List[PredictRequest]
 
 
 class BatchPredictResponse(BaseModel):

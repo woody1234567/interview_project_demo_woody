@@ -10,8 +10,15 @@ export type TransactionInput = {
   isFlaggedFraud: 0 | 1
 }
 
+export type ModelName = 'xgboost' | 'decision_tree' | 'logistic_regression'
+
+export type PredictionInput = {
+  transaction: TransactionInput
+  model_name: ModelName
+}
+
 const emit = defineEmits<{
-  submit: [payload: TransactionInput]
+  submit: [payload: PredictionInput]
 }>()
 
 const form = reactive<TransactionInput>({
@@ -22,11 +29,13 @@ const form = reactive<TransactionInput>({
   newbalanceOrig: 4000,
   oldbalanceDest: 2000,
   newbalanceDest: 3000,
-  isFlaggedFraud: 0
+  isFlaggedFraud: 0,
 })
 
+const modelName = ref<ModelName>('xgboost')
+
 function onSubmit() {
-  emit('submit', { ...form })
+  emit('submit', { transaction: { ...form }, model_name: modelName.value })
 }
 </script>
 
@@ -59,6 +68,15 @@ function onSubmit() {
         <select v-model.number="form.isFlaggedFraud">
           <option :value="0">0</option>
           <option :value="1">1</option>
+        </select>
+      </label>
+
+      <label>
+        Model
+        <select v-model="modelName">
+          <option value="xgboost">xgboost</option>
+          <option value="decision_tree">decision_tree</option>
+          <option value="logistic_regression">logistic_regression</option>
         </select>
       </label>
     </div>

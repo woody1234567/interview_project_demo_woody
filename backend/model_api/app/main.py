@@ -4,9 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .schemas import (
-    FeatureInput,
+    PredictRequest,
     PredictResponse,
-    BatchFeatureInput,
+    BatchPredictRequest,
     BatchPredictResponse,
 )
 from .predictor import (
@@ -44,35 +44,38 @@ def health():
         'service': 'model-api',
         'model_version': MODEL_VERSION,
         'runtime_model': SCORER.runtime_model,
-        'model_path': SCORER.model_path,
         'model_loaded': SCORER.enabled,
-        'load_error': SCORER.load_error,
+        'loaded_models': list(SCORER.models.keys()),
+        'model_paths': SCORER.model_paths,
+        'load_errors': SCORER.load_errors,
         'metadata': metadata,
     }
 
 
 @app.post('/v1/model/predict', response_model=PredictResponse)
-def predict(payload: FeatureInput):
-    prob = score(payload.model_dump())
+def predict(payload: PredictRequest):
+    prob, used_model = score(payload.model_dump(), model_name=payload.model_name)
     return PredictResponse(
         fraud_prob=prob,
         risk_level=risk_level(prob),
         thresholds={'t_mid': T_MID, 't_high': T_HIGH},
         model_version=MODEL_VERSION,
+        model_used=used_model,
     )
 
 
 @app.post('/v1/model/predict-batch', response_model=BatchPredictResponse)
-def predict_batch(payload: BatchFeatureInput):
+def predict_batch(payload: BatchPredictRequest):
     items = []
     for row in payload.items:
-        prob = score(row.model_dump())
+        prob, used_model = score(row.model_dump(), model_name=row.model_name)
         items.append(
             PredictResponse(
                 fraud_prob=prob,
                 risk_level=risk_level(prob),
                 thresholds={'t_mid': T_MID, 't_high': T_HIGH},
                 model_version=MODEL_VERSION,
+                model_used=used_model,
             )
         )
     return BatchPredictResponse(items=items)
