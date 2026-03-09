@@ -7,15 +7,15 @@
 ## Run (feature api)
 ```bash
 cd backend/feature_api
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
+uv sync          # first time: installs deps + creates .venv
+uv run uvicorn app.main:app --reload --port 8001
 ```
 
 ## Run (model api)
 ```bash
 cd backend/model_api
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8002
+uv sync          # first time: installs deps + creates .venv
+uv run uvicorn app.main:app --reload --port 8002
 ```
 
 ## Endpoints
