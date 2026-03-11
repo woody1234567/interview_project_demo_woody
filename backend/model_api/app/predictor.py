@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -68,7 +69,9 @@ class MultiModelScorer:
             for name, path in MODEL_FILES.items():
                 if path.exists():
                     try:
-                        model = joblib.load(path)
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('ignore', category=UserWarning, module='xgboost')
+                            model = joblib.load(path)
                         if not hasattr(model, 'predict_proba'):
                             raise ValueError('predict_proba not found')
                         self.models[name] = model

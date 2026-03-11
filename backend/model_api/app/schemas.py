@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal, List, Optional
 
 TxnType = Literal['CASH_IN', 'CASH_OUT', 'DEBIT', 'PAYMENT', 'TRANSFER']
@@ -23,10 +23,12 @@ class FeatureInput(BaseModel):
 
 
 class PredictRequest(FeatureInput):
+    model_config = ConfigDict(protected_namespaces=())
     model_name: Optional[ModelName] = 'xgboost'
 
 
 class PredictResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     fraud_prob: float
     risk_level: RiskLevel
     thresholds: dict
