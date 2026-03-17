@@ -1,8 +1,6 @@
 <script setup lang="ts">
 const items = [
-  { label: 'Home', icon: 'i-heroicons-home', to: '/' },
-  { label: 'Features', icon: 'i-heroicons-star', to: '#' },
-  { label: 'Pricing', icon: 'i-heroicons-banknotes', to: '#' }
+  { label: 'Home', icon: 'i-heroicons-home', to: '/' }
 ]
 
 const colorMode = useColorMode()

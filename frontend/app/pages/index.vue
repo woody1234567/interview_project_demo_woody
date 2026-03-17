@@ -12,9 +12,31 @@ const config = useRuntimeConfig()
 const featureApiBase = config.public.featureApiBase
 const modelApiBase = config.public.modelApiBase
 
+const featureStatus = ref<'idle' | 'loading' | 'ok' | 'fail'>('idle')
+const modelStatus = ref<'idle' | 'loading' | 'ok' | 'fail'>('idle')
+
 const loading = ref(false)
 const errorMsg = ref('')
 const result = ref<PredictResp | null>(null)
+
+async function checkConnections() {
+  featureStatus.value = 'loading'
+  modelStatus.value = 'loading'
+  
+  try {
+    const feature = await $fetch<{ status: string }>(`${featureApiBase}/health`)
+    featureStatus.value = feature.status === 'ok' ? 'ok' : 'fail'
+  } catch {
+    featureStatus.value = 'fail'
+  }
+
+  try {
+    const model = await $fetch<{ status: string }>(`${modelApiBase}/health`)
+    modelStatus.value = model.status === 'ok' ? 'ok' : 'fail'
+  } catch {
+    modelStatus.value = 'fail'
+  }
+}
 
 async function runPrediction(payload: PredictionInput) {
   loading.value = true
@@ -22,7 +44,7 @@ async function runPrediction(payload: PredictionInput) {
   result.value = null
 
   try {
-    const featureResp = await $fetch(`${featureApiBase}/v1/features/transform`, {
+    const featureResp = await $fetch<any>(`${featureApiBase}/v1/features/transform`, {
       method: 'POST',
       body: payload.transaction,
     })
@@ -54,6 +76,54 @@ async function runPrediction(payload: PredictionInput) {
         Input transaction details to analyze risk levels using our advanced AI models. 
         Our system transforms features and predicts fraud probability in real-time.
       </p>
+
+      <div class="mt-8 flex flex-wrap items-center gap-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+        <UButton 
+          icon="i-heroicons-bolt" 
+          variant="subtle" 
+          color="neutral" 
+          size="sm" 
+          label="Check Connection" 
+          :loading="featureStatus === 'loading' || modelStatus === 'loading'"
+          @click="checkConnections"
+        />
+        
+        <div class="flex items-center gap-6 ml-auto">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Feature API</span>
+            <UBadge 
+              v-if="featureStatus !== 'idle'" 
+              :color="featureStatus === 'ok' ? 'success' : 'error'" 
+              variant="subtle" 
+              size="sm"
+              class="min-w-15 justify-center"
+            >
+              <template #leading>
+                <span class="w-2 h-2 rounded-full animate-pulse" :class="featureStatus === 'ok' ? 'bg-success-500' : 'bg-error-500'" />
+              </template>
+              {{ featureStatus === 'ok' ? 'OK' : 'fail' }}
+            </UBadge>
+            <span v-else class="text-xs text-gray-400 italic">Not checked</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Model API</span>
+            <UBadge 
+              v-if="modelStatus !== 'idle'" 
+              :color="modelStatus === 'ok' ? 'success' : 'error'" 
+              variant="subtle" 
+              size="sm"
+              class="min-w-15 justify-center"
+            >
+              <template #leading>
+                <span class="w-2 h-2 rounded-full animate-pulse" :class="modelStatus === 'ok' ? 'bg-success-500' : 'bg-error-500'" />
+              </template>
+              {{ modelStatus === 'ok' ? 'OK' : 'fail' }}
+            </UBadge>
+            <span v-else class="text-xs text-gray-400 italic">Not checked</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
