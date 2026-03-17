@@ -17,7 +17,7 @@ app = FastAPI(title='feature-api', version='0.1.0')
 
 allowed_origins = os.getenv(
     'ALLOWED_ORIGINS',
-    'http://localhost:3000,http://127.0.0.1:3000'
+    'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,https://frauddetection.zeabur.app'
 ).split(',')
 
 app.add_middleware(

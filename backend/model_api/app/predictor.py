@@ -4,7 +4,9 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
+if TYPE_CHECKING:
+    from .schemas import RiskLevel
 
 
 MODEL_VERSION = os.getenv('MODEL_VERSION', 'baseline_multi_model_v1')
@@ -124,7 +126,7 @@ def score(features: Dict, model_name: Optional[str] = None) -> tuple[float, str]
     return SCORER.score(features, model_name=model_name)
 
 
-def risk_level(prob: float) -> str:
+def risk_level(prob: float) -> RiskLevel:
     if prob >= T_HIGH:
         return 'HIGH'
     if prob >= T_MID:
